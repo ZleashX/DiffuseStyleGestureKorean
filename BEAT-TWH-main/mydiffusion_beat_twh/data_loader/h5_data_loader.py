@@ -24,7 +24,7 @@ class SpeechGestureDataset(torch.utils.data.Dataset):
         gesture_mean = np.load(os.path.join(npy_root, "gesture_" + dataset + "_mean_" + self.version + ".npy"))
         gesture_std = np.load(os.path.join(npy_root, "gesture_" + dataset + "_std_" + self.version + ".npy"))
 
-        self.id = [speaker_id_dict[int(self.h5[str(i)]["speaker_id"][:][0])] for i in range(len(self.h5.keys()))]
+        self.id = [int(self.h5[str(i)]["speaker_id"][:][0]) for i in range(self.len)]
         self.audio = [self.h5[str(i)]["audio"][:] for i in range(len(self.h5.keys()))]
         self.text = [self.h5[str(i)]["text"][:] for i in range(len(self.h5.keys()))]
         self.gesture = [(self.h5[str(i)]["gesture"][:] - gesture_mean) / gesture_std for i in range(len(self.h5.keys()))]
