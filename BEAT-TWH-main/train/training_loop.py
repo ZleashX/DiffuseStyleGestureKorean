@@ -60,6 +60,33 @@ class TrainLoop:
                 {'params': self.mp_trainer.master_params, 'lr':self.lr, 'weight_decay':self.weight_decay}
             ])
 
+        # Resume from checkpoint
+        model_files = list(bf.glob(bf.join(self.save_dir, "model*.pt")))
+        if model_files:
+            # pick the most recent by filename (or sort)
+            latest = sorted(model_files)[-1]
+            resume_step = parse_resume_step_from_filename(latest)
+            print(f"Loading model checkpoint {latest} (step {resume_step})")
+            with bf.BlobFile(latest, "rb") as f:
+                state_dict = torch.load(f, map_location=self.device)
+            # load into model
+            self.model.load_state_dict(state_dict)
+            # if using fp16, set master params to match saved state so optimizer params align
+            try:
+                self.mp_trainer.master_params = self.mp_trainer.state_dict_to_master_params(state_dict)
+            except Exception:
+                # non-fp16 path: master_params is already model params list
+                pass
+            # try to load optimizer
+            opt_path = bf.join(self.save_dir, f"opt{resume_step:09d}.pt")
+            if bf.exists(opt_path):
+                print(f"Loading optimizer state from {opt_path}")
+                with bf.BlobFile(opt_path, "rb") as f:
+                    opt_state = torch.load(f, map_location=self.device)
+                self.opt.load_state_dict(opt_state)
+            self.resume_step = resume_step
+            print(f"Resumed from step {self.resume_step}")
+
         # if self.resume_step:
         #     self._load_optimizer_state()
             # Model was resumed, either due to a restart or a checkpoint
@@ -78,7 +105,7 @@ class TrainLoop:
 
     # def _load_and_sync_parameters(self):
     #     resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
-    #
+    
     #     if resume_checkpoint:
     #         self.resume_step = parse_resume_step_from_filename(resume_checkpoint)
     #         logger.log(f"loading model from checkpoint: {resume_checkpoint}...")
