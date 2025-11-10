@@ -19,7 +19,7 @@ lr_anneal_steps: 0
 save_dir: "./BEAT_mymodel4_512"
 audio_feat: "wavlm"
 max_num_steps: 50000000
-save_iters: 180000
+save_iters: 5000
 name: "DiffuseStyleGesture+"   # "DiffuseStyleGesture", "DiffuseStyleGesture+", "DiffuseStyleGesture++"
 version: "v0"   # "v0, v1"
 suffix: ""
