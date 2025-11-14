@@ -72,12 +72,17 @@ if __name__ == '__main__':
         config.cond_mode = 'cross_local_attention4_style1'
     elif config.name == 'DiffuseStyleGesture':
         config.cond_mode = 'cross_local_attention3_style1'
-        
-    drv = '../../../drive/MyDrive/DiffuseStyleGesture/checkpoints'
-    os.makedirs(drv, exist_ok=True)
-    config.save_dir = os.path.join(drv, config.dataset + "_mymodel4_512" + '_' + config.version)
-    os.makedirs(config.save_dir, exist_ok=True)
-    print("Saving checkpoints to Google Drive:")
+
+    if 'google.colab' in sys.modules:
+        drv = '../../../drive/MyDrive/DiffuseStyleGesture/checkpoints'
+        os.makedirs(drv, exist_ok=True)
+        config.save_dir = os.path.join(drv, config.dataset + "_mymodel4_512" + '_' + config.version)
+        os.makedirs(config.save_dir, exist_ok=True)
+        print("Saving checkpoints to Google Drive:")
+    else:
+        config.save_dir = "./" + config.dataset + "_mymodel4_512" + '_' + config.version
+        if config.suffix != "":
+            config.save_dir = config.save_dir + '_' + config.suffix
     print('model save path: ', config.save_dir, '   version:', config.version)
     
     if config.dataset == 'BEAT':
@@ -98,11 +103,13 @@ if __name__ == '__main__':
             config.style_dim = 17
             config.audio_feature_dim = 1435     # with laugh
     elif config.dataset == 'KLSG':
-        config.style_dim = 7
+        print("Using KLSG dataset settings")
+        config.style_dim = 4
         config.audio_feature_dim = 1434
         config.motion_dim = 66
         config.njoints = 198
     else:
         raise NotImplementedError
+
     config.h5file = '../process/' + config.dataset + '_' + config.version + '.h5'
     main(config)
