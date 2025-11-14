@@ -340,7 +340,7 @@ if __name__ == '__main__':
             config.style_dim = 17
             config.audio_feature_dim = 1435     # with laugh
     elif config.dataset == 'KLSG':
-        config.style_dim = 7
+        config.style_dim = 4
         config.audio_feature_dim = 1434
         config.motion_dim = 66
         config.njoints = 198
