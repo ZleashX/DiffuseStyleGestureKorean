@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from easydict import EasyDict
 import math
 from process_BEAT_bvh import wav2wavlm, pose2bvh, pose2bvh_bugfix
+from process_KLSG_bvh import wav2wavlm, pose2bvh
 from process_TWH_bvh import pose2bvh as pose2bvh_twh
 from process_TWH_bvh import wavlm_init, load_metadata
 import argparse
@@ -49,6 +50,9 @@ def inference(args, save_dir, prefix, textaudio, sample_fn, model, n_frames=0, s
         assert speaker in speaker_id_dict.keys()
     elif dataset == 'TWH':
         speaker = np.where(style == np.max(style))[0][0]
+    elif dataset == 'KLSG':
+        speaker = np.argwhere(style == 1)[0][0]
+
     if n_frames == 0:
         n_frames = textaudio.shape[0]
     else:
@@ -78,6 +82,9 @@ def inference(args, save_dir, prefix, textaudio, sample_fn, model, n_frames=0, s
     elif dataset == 'TWH':
         data_mean_ = np.load("../process/gesture_TWH_mean_v0" + ".npy")
         data_std_ = np.load("../process/gesture_TWH_std_v0" + ".npy")
+    elif dataset == 'KLSG':
+        data_mean_ = np.load("../process/gesture_KLSG_mean_" + args.version + ".npy")
+        data_std_ = np.load("../process/gesture_KLSG_std_" + args.version + ".npy")
 
     data_mean = np.array(data_mean_)
     data_std = np.array(data_std_)
@@ -120,6 +127,9 @@ def inference(args, save_dir, prefix, textaudio, sample_fn, model, n_frames=0, s
 
             elif dataset == 'TWH':
                 seed_gesture = np.load("../../TWH_dataset/processed/" + 'gesture_TWH' + "/val_2023_v0_014_main-agent.npy")[:args.n_seed + 2]
+            
+            elif dataset == 'KLSG':
+                seed_gesture = np.load("../../KLSG_dataset/processed/" + 'gesture_KLSG' + "/MM_M_C_F_C_S077_001.npy")[:args.n_seed + 2]
 
             seed_gesture = (seed_gesture - data_mean) / data_std
             seed_gesture_vel = seed_gesture[1:] - seed_gesture[:-1]
@@ -199,6 +209,8 @@ def inference(args, save_dir, prefix, textaudio, sample_fn, model, n_frames=0, s
             raise ValueError("wrong version name")
     elif dataset == 'TWH':
         pose2bvh_twh(out_poses, save_dir, prefix, pipeline_path="../process/resource/pipeline_rotmat_62.sav")
+    elif dataset == 'KLSG':
+        pose2bvh(save_dir, prefix, out_poses, pipeline="../process/resource/data_pipe_KLSG_30fps.sav")
 
 
 def main(args, save_dir, model_path, tst_path=None, max_len=0, skip_timesteps=0, tst_prefix=None, dataset='BEAT', 
@@ -235,6 +247,10 @@ def main(args, save_dir, model_path, tst_path=None, max_len=0, skip_timesteps=0,
                 _, speaker_id = metadict_byfname[filename]
                 speaker = np.zeros([17])
                 speaker[speaker_id] = 1
+            elif dataset == 'KLSG':
+                speaker_id = 0
+                speaker = np.zeros([args.style_dim])
+                speaker[speaker_id] = 1
                 
             audio_path = os.path.join(tst_audio_dir, filename + '.npy')
             audio = np.load(audio_path)
@@ -251,6 +267,8 @@ def main(args, save_dir, model_path, tst_path=None, max_len=0, skip_timesteps=0,
             from process_TWH_bvh import load_wordvectors, load_audio, load_tsv
         elif dataset == 'BEAT':
             from process_BEAT_bvh import load_wordvectors, load_audio, load_tsv
+        elif dataset == 'KLSG':
+            from process_KLSG_bvh import load_wordvectors, load_audio, load_tsv
 
         wavlm_model, cfg = wavlm_init(wavlm_path, mydevice)
         word2vector = load_wordvectors(fname=word2vector_path)
@@ -321,6 +339,11 @@ if __name__ == '__main__':
             config.audio_feat_dim_latent = 128
             config.style_dim = 17
             config.audio_feature_dim = 1435     # with laugh
+    elif config.dataset == 'KLSG':
+        config.style_dim = 7
+        config.audio_feature_dim = 1434
+        config.motion_dim = 66
+        config.njoints = 198
     else:
         raise NotImplementedError
 
