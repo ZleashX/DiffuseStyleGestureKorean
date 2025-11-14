@@ -30,9 +30,19 @@ class SpeechGestureDataset(torch.utils.data.Dataset):
         self.gesture = [(self.h5[str(i)]["gesture"][:] - gesture_mean) / gesture_std for i in range(len(self.h5.keys()))]
         self.h5.close()
         self.sequence_length = sequence_length
-        if "v0" in self.version:
-            self.gesture_vel = [np.concatenate((np.zeros([1, self.motion_dim]), i[1:] - i[:-1]), axis=0) for i in self.gesture]
-            self.gesture_acc = [np.concatenate((np.zeros([1, self.motion_dim]), i[1:] - i[:-1]), axis=0) for i in self.gesture_vel]
+        g_dim = self.gesture[0].shape[1]
+        if "v0" in self.version and g_dim == self.motion_dim:
+            # Raw position only; compute vel/acc
+            self.gesture_vel = [np.vstack([np.zeros((1, g_dim)), np.diff(g, axis=0)]) for g in self.gesture]
+            self.gesture_acc = [np.vstack([np.zeros((1, g_dim)), np.diff(v, axis=0)]) for v in self.gesture_vel]
+            self.final_concat = True
+        else:
+            # Already has pos/vel/acc or mismatch; skip recompute
+            self.gesture_vel = [np.zeros_like(g) for g in self.gesture]
+            self.gesture_acc = [np.zeros_like(g) for g in self.gesture]
+            self.final_concat = False
+            if g_dim != self.motion_dim:
+                print(f"[INFO] gesture feature dim {g_dim} != motion_dim {self.motion_dim}; assuming pre-concatenated features.")
         print("Total clips:", len(self.gesture))
         self.segment_length = sequence_length
 
@@ -55,9 +65,12 @@ class SpeechGestureDataset(torch.utils.data.Dataset):
         #     gesture = np.concatenate((posrat, vel, acc), axis=-1)
         # else:
         #     gesture = posrat
-        vel = self.gesture_vel[idx][start_frame:end_frame]
-        acc = self.gesture_acc[idx][start_frame:end_frame]
-        gesture = np.concatenate((posrat, vel, acc), axis=-1)
+        if self.final_concat:
+            vel = self.gesture_vel[idx][start_frame:end_frame]
+            acc = self.gesture_acc[idx][start_frame:end_frame]
+            gesture = np.concatenate((posrat, vel, acc), axis=-1)
+        else:
+            gesture = posrat
         # gesture = posrat
         
         gesture = torch.FloatTensor(gesture)
