@@ -187,16 +187,19 @@ def inference(args, save_dir, prefix, textaudio, sample_fn, model, n_frames=0, s
     else:
         raise ValueError("wrong version name")
 
-    out_list = [i.detach().data.cpu().numpy()[:, :args.njoints // motion_feature_division] for i in out_list]
+    out_list = [i.detach().data.cpu().numpy() for i in out_list]
     if len(out_list) > 1:
-        out_dir_vec_1 = np.vstack(out_list[:-1])
-        sampled_seq_1 = out_dir_vec_1.squeeze(2).transpose(0, 2, 1).reshape(batch_size, -1, model.njoints // motion_feature_division)
-        out_dir_vec_2 = np.array(out_list[-1]).squeeze(2).transpose(0, 2, 1)
+        out_dir_vec_1 = np.vstack(out_list[:-1])          # (n_sub-1, 1, 198, n_poses)
+        sampled_seq_1 = out_dir_vec_1.squeeze(2).transpose(0, 2, 1).reshape(batch_size, -1, model.njoints)
+        out_dir_vec_2 = out_list[-1].squeeze(2).transpose(0, 2, 1)  # (1, n_poses, 198)
         sampled_seq = np.concatenate((sampled_seq_1, out_dir_vec_2), axis=1)
     else:
-        sampled_seq = np.array(out_list[-1]).squeeze(2).transpose(0, 2, 1)
+        sampled_seq = out_list[-1].squeeze(2).transpose(0, 2, 1)
     sampled_seq = sampled_seq[:, args.n_seed:]
 
+    # ensure data_mean/std match sampled channel count (chan = model output channels per frame)
+    data_mean = np.array(data_mean_)
+    data_std = np.array(data_std_)
     out_poses = np.multiply(sampled_seq[0], data_std) + data_mean
     print(out_poses.shape, real_n_frames)
     out_poses = out_poses[:real_n_frames]
@@ -210,7 +213,7 @@ def inference(args, save_dir, prefix, textaudio, sample_fn, model, n_frames=0, s
     elif dataset == 'TWH':
         pose2bvh_twh(out_poses, save_dir, prefix, pipeline_path="../process/resource/pipeline_rotmat_62.sav")
     elif dataset == 'KLSG':
-        pose2bvh(save_dir, prefix, out_poses, pipeline="../process/resource/data_pipe_KLSG_30fps.sav")
+        pose2bvh(save_dir, prefix, out_poses, pipeline="../process/resource/data_pipe_klsg.sav")
 
 
 def main(args, save_dir, model_path, tst_path=None, max_len=0, skip_timesteps=0, tst_prefix=None, dataset='BEAT', 
@@ -365,4 +368,3 @@ if __name__ == '__main__':
     main(config, config.save_dir, config.model_path, tst_path=config.tst_path, max_len=config.max_len,
          skip_timesteps=config.skip_timesteps, tst_prefix=config.tst_prefix, dataset=config.dataset, 
          wav_path=config.wav_path, txt_path=config.txt_path, wavlm_path=config.wavlm_path, word2vector_path=config.word2vector_path)
-
