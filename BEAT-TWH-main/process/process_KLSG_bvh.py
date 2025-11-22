@@ -37,32 +37,66 @@ bone_names = ['Spine', 'Spine1', 'Neck', 'Head',
 
 order = 'XYZ'       # 'XYZ', 'ZXY'
 
-def preprocess_animation(animation_file, fps=120):
-    # TODO
-    pass
+def process_bvh_files(gesture_filename):
+    p = BVHParser()
+
+    data_all = list()
+    data_all.append(p.parse(gesture_filename))
+
+    data_pipe = Pipeline([
+        ('dwnsampl', DownSampler(tgt_fps=30, keep_all=False)),
+        # ('root', RootTransformer('hip_centric')),
+        # ('mir', Mirror(axis='X', append=True)),
+        ('jtsel', JointSelector(bone_names, include_root=True)),  # 'Hips'
+        # ('cnst', ConstantsRemover()),       # (2, 6061, n)  -> (2, 6061, n+6)
+        ('np', Numpyfier())
+    ])
+
+    out_data = data_pipe.fit_transform(data_all)
+    if not os.path.exists('./resource'):
+        os.makedirs('./resource')
+    speaker = gesture_filename.split('/')[-1].split('_')[0]
+    jl.dump(data_pipe, os.path.join('./resource', 'data_pipe_KLSG_30fps.sav'))
+
+    print(out_data.shape)
+
+    # euler -> rotation matrix
+    out_data = out_data.reshape((out_data.shape[0], out_data.shape[1], -1, 3))
+    out_matrix = np.zeros((out_data.shape[0], out_data.shape[1], out_data.shape[2], 9))
+    for i in range(out_data.shape[0]):  # mirror
+        for j in range(out_data.shape[1]):  # frames
+            r = R.from_euler(order, out_data[i, j], degrees=True)
+            out_matrix[i, j] = r.as_matrix().reshape(out_data.shape[2], 9)
+    out_matrix = out_matrix.reshape((out_data.shape[0], out_data.shape[1], -1))
+
+    return out_matrix[0]
 
 
-def euler2mat(angles, euler_orders):
-    # TODO
-    pass
+def pose2bvh(save_path, filename_prefix, poses, pipeline='./resource/data_pipe_KLSG_30fps.sav',
+             smoothing=True):
+    writer = BVHWriter()
+    pipeline = jl.load(pipeline)
 
+    # smoothing
+    n_poses = poses.shape[0]
+    out_poses = np.zeros((n_poses, poses.shape[1]))
 
-def rotation_matrix_to_quaternion(rotation_matrix, eps=1e-6):
-    # todo
-    pass
+    for i in range(poses.shape[1]):
+        out_poses[:, i] = savgol_filter(poses[:, i], 15, 2)  # NOTE: smoothing on rotation matrices is not optimal
 
-def process_bvh(gesture_filename):
-    all_poses, parents, dt, order, njoints = preprocess_animation(gesture_filename, fps=30)
-    return all_poses
+    # rotation matrix to euler angles
+    out_poses = out_poses.reshape((out_poses.shape[0], -1, 9))
+    out_poses = out_poses.reshape((out_poses.shape[0], out_poses.shape[1], 3, 3))
+    out_euler = np.zeros((out_poses.shape[0], out_poses.shape[1] * 3))
+    for i in range(out_poses.shape[0]):  # frames
+        r = R.from_matrix(out_poses[i])
+        out_euler[i] = r.as_euler(order, degrees=True).flatten()
 
-def write_bvh(filename, V_root_pos, V_root_rot, V_lpos, V_lrot, parents, names, order, dt, start_position=None, start_rotation=None):
-    # TODO
-    pass
+    bvh_data = pipeline.inverse_transform([out_euler])
 
-
-def pose2bvh(save_path, filename_prefix, poses, smoothing=True):
-    # TODO
-    pass
+    out_bvh_path = os.path.join(save_path, filename_prefix + '_generated.bvh')
+    with open(out_bvh_path, 'w') as f:
+        writer.write(bvh_data[0], f)
 
 
 def wavlm_init(wavlm_model_path, device=torch.device('cuda:0')):
@@ -304,8 +338,7 @@ def make_gesture_dataset(base_path, save_path, preload=False, wavlm_model=None, 
                 if os.path.exists(os.path.join(motion_save_path, name + ".npy")):
                     print(f'gesture {name} exist')
                 else:
-                    mocap = parser.parse(bvh_file)
-                    poses = mocap.values.values.astype(np.float32) 
+                    poses = process_bvh_files(bvh_file)
                     np.save(os.path.join(motion_save_path, name + ".npy"), poses)
 
                 # process audio
